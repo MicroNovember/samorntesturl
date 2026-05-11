@@ -1,0 +1,59 @@
+name: API Data Processor
+on:
+  workflow_dispatch:  # กดรันเองได้
+  schedule:
+    - cron: '*/30 * * * *'  # รันทุก 30 นาที
+  push:
+    paths:
+      - 'data_processor.py'
+      - 'requirements.txt'
+
+jobs:
+  api-processor:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run Data Processor
+        run: python data_processor.py
+        
+      - name: Run Web Scraper
+        run: python web_scraper.py
+        
+      - name: Validate Output
+        run: |
+          echo "Checking output files..."
+          ls -la *.json *.csv 2>/dev/null || echo "No output files found"
+          
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-results-${{ matrix.python-version }}
+          path: |
+            *.json
+            *.csv
+          retention-days: 3

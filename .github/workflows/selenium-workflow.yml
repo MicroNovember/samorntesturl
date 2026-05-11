@@ -1,0 +1,49 @@
+name: Selenium Web Automation
+on:
+  workflow_dispatch:  # กดรันเองได้
+  schedule:
+    - cron: '0 2 * * *'  # รันทุกวันตอน 2 โมงเช้า
+
+jobs:
+  selenium-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install Chrome and Driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable chromium-chromedriver
+          google-chrome --version
+          chromedriver --version
+          
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium webdriver-manager requests beautifulsoup4 pandas
+          
+      - name: Run Selenium Script
+        run: python scanner.py  # จากไฟล์ตัวอย่างเดิม
+        continue-on-error: true  # ไม่ให้หยุด workflow ถ้าเกิด error
+        
+      - name: Run Web Scraper
+        run: python web_scraper.py
+        
+      - name: Upload Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: selenium-results
+          path: |
+            *.json
+            *.csv
+            *.log
+            playlist.json
+          retention-days: 7

@@ -1,0 +1,20 @@
+# Python dependencies for GitHub Actions
+# เพิ่ม libraries ที่ต้องการที่นี่
+
+# สำหรับ web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# สำหรับ data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# สำหรับ automation (จากตัวอย่าง scanner.py)
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+
+# สำหรับ HTTP requests
+httpx>=0.24.0
+
+# สำหรับ file handling
+pathlib2>=2.3.0
