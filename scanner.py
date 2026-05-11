@@ -65,6 +65,7 @@ def scan():
             title = driver.title
             print(f"📄 Page title: {title}")
             
+            # วิธีที่ 1: Performance logs
             logs = driver.get_log("performance")
             print(f"📊 Found {len(logs)} performance logs")
             
@@ -76,6 +77,37 @@ def scan():
                     if ".m3u8" in target:
                         print(f"🎯 Found M3U8: {target}")
                         playlist["groups"][0]["stations"].append({"name": name, "url": target})
+                        print(f"✅ Added {name} to playlist")
+                        found_m3u8 = True
+                        break
+            
+            # วิธีที่ 2: หาใน page source
+            if not found_m3u8:
+                print("🔍 Searching in page source...")
+                page_source = driver.page_source
+                import re
+                m3u8_patterns = re.findall(r'https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*', page_source)
+                
+                for pattern in m3u8_patterns:
+                    if "index" in pattern or "master" in pattern or "playlist" in pattern:
+                        print(f"🎯 Found M3U8 in source: {pattern}")
+                        playlist["groups"][0]["stations"].append({"name": name, "url": pattern})
+                        print(f"✅ Added {name} to playlist")
+                        found_m3u8 = True
+                        break
+            
+            # วิธีที่ 3: รอและค้นหาอีกครั้ง
+            if not found_m3u8:
+                print("⏳ Waiting 10 more seconds and retrying...")
+                time.sleep(10)
+                
+                # หา video elements
+                videos = driver.find_elements("tag name", "video")
+                for video in videos:
+                    src = video.get_attribute("src")
+                    if src and ".m3u8" in src:
+                        print(f"🎯 Found M3U8 in video element: {src}")
+                        playlist["groups"][0]["stations"].append({"name": name, "url": src})
                         print(f"✅ Added {name} to playlist")
                         found_m3u8 = True
                         break
