@@ -10,6 +10,9 @@ jobs:
     # เพิ่ม permissions เพื่อให้ชัวร์ว่า Push ไฟล์กลับได้
     permissions:
       contents: write
+    # ตั้งค่าให้ใช้ Node.js 24 เพื่อแก้ปัญหา deprecation
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       
     steps:
       - name: Checkout code

@@ -11,6 +11,9 @@ on:
 jobs:
   api-processor:
     runs-on: ubuntu-latest
+    # ตั้งค่าให้ใช้ Node.js 24 เพื่อแก้ปัญหา deprecation
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     strategy:
       matrix:
