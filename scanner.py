@@ -18,45 +18,95 @@ def get_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-web-security")
+    options.add_argument("--allow-running-insecure-content")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     
-    # ตรวจสอบว่ารันบน GitHub หรือไม่ ถ้าใช่ให้ใช้ Path ที่ GitHub เตรียมไว้
-    if os.environ.get("GITHUB_ACTIONS"):
-        options.binary_location = "/usr/bin/google-chrome"
-        service = Service("/usr/bin/chromedriver")
-    else:
-        # สำหรับรันบน Windows เครื่องตัวเอง
-        service = Service(ChromeDriverManager().install())
-    
-    driver = webdriver.Chrome(service=service, options=options)
-    return driver
+    try:
+        # ตรวจสอบว่ารันบน GitHub หรือไม่
+        if os.environ.get("GITHUB_ACTIONS"):
+            print("🤖 Running on GitHub Actions")
+            options.binary_location = "/usr/bin/google-chrome"
+            service = Service("/usr/bin/chromedriver")
+        else:
+            print("🏠 Running locally")
+            service = Service(ChromeDriverManager().install())
+        
+        driver = webdriver.Chrome(service=service, options=options)
+        print("✅ WebDriver initialized successfully")
+        return driver
+        
+    except Exception as e:
+        print(f"❌ Error initializing WebDriver: {e}")
+        raise
 
 def scan():
+    print("🚀 Starting M3U8 Scanner...")
     playlist = {"groups": [{"name": "LIVE", "stations": []}]}
-    driver = get_driver()
+    
+    try:
+        driver = get_driver()
+        print("🌐 WebDriver ready, starting scan...")
+    except Exception as e:
+        print(f"❌ Failed to initialize WebDriver: {e}")
+        return
     
     for name, url in CHANNELS.items():
         try:
-            print(f"Scanning: {name}")
+            print(f"\n🔍 Scanning: {name}")
+            print(f"📍 URL: {url}")
+            
             driver.get(url)
-            time.sleep(15) # รอให้ไฟล์ m3u8 โผล่
+            print("⏳ Waiting 20 seconds for page to load...")
+            time.sleep(20)
+            
+            # Debug: ดูว่า page title คืออะไร
+            title = driver.title
+            print(f"📄 Page title: {title}")
             
             logs = driver.get_log("performance")
+            print(f"📊 Found {len(logs)} performance logs")
+            
+            found_m3u8 = False
             for entry in logs:
                 msg = json.loads(entry["message"])["message"]
                 if "params" in msg and "request" in msg["params"]:
                     target = msg["params"]["request"].get("url", "")
-                    if ".m3u8" in target and ("index" in target or "master" in target):
+                    if ".m3u8" in target:
+                        print(f"🎯 Found M3U8: {target}")
                         playlist["groups"][0]["stations"].append({"name": name, "url": target})
-                        print(f"✅ Found: {name}")
+                        print(f"✅ Added {name} to playlist")
+                        found_m3u8 = True
                         break
-        except Exception as e:
-            print(f"❌ Error {name}: {e}")
             
-    driver.quit()
+            if not found_m3u8:
+                print(f"❌ No M3U8 found for {name}")
+                
+        except Exception as e:
+            print(f"❌ Error scanning {name}: {e}")
     
+    try:
+        driver.quit()
+        print("🔚 WebDriver closed")
+    except:
+        pass
+    
+    # แสดงสรุป
+    total_found = len(playlist["groups"][0]["stations"])
+    print(f"\n📋 Scan completed! Found {total_found} stations")
+    
+    # บันทึกผลลัพธ์
     with open("playlist.json", "w", encoding="utf-8") as f:
         json.dump(playlist, f, ensure_ascii=False, indent=2)
+    
+    print("💾 Saved to playlist.json")
+    
+    if total_found == 0:
+        print("⚠️ No M3U8 streams found. This could be due to:")
+        print("   - Website blocking")
+        print("   - Changed stream URLs")
+        print("   - Network issues")
 
 if __name__ == "__main__":
     scan()
