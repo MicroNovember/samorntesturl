@@ -1,0 +1,42 @@
+name: Auto Scan M3U8
+on:
+  schedule:
+    - cron: '0 */4 * * *' # รันทุก 4 ชั่วโมง
+  workflow_dispatch:      # กดปุ่มรันเองได้
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # เพิ่ม permissions เพื่อให้ชัวร์ว่า Push ไฟล์กลับได้
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # อัปเดตเป็น v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5 # อัปเดตเป็น v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Chrome and Driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Dependencies
+        run: |
+          pip install selenium webdriver-manager
+
+      - name: Run Scanner
+        run: python scanner.py
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add playlist.json
+          # ใส่ || true เพื่อไม่ให้พังถ้าไม่มีการเปลี่ยนแปลงข้อมูล (ไม่มีอะไรให้ commit)
+          git commit -m "Update playlist.json [Skip CI]" || true
+          git push
