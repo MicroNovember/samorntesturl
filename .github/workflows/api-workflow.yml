@@ -50,7 +50,7 @@ jobs:
           ls -la *.json *.csv 2>/dev/null || echo "No output files found"
           
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: api-results-${{ matrix.python-version }}
           path: |
