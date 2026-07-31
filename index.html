@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EZmovie ดึงลิงก์ (แก้ GitHub 404+CORS)</title>
+  <title>EZmovie — 1.001</title>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
     body { max-width:950px; margin:20px auto; padding:0 15px; background:#0f111a; color:#e6edf7; }
@@ -16,131 +16,331 @@
     button:disabled { background:#344260; cursor:not-allowed; }
     pre { background:#0b0d14; padding:12px; border-radius:8px; overflow:auto; max-height:380px; font-size:13px; line-height:1.4; }
     .stat { display:flex; gap:20px; margin:8px 0; flex-wrap:wrap; font-weight:500; }
-    .ok { color:#5be389; } .err { color:#ff6b81; }
+    .ok { color:#5be389; } .err { color:#ff6b81; } .warn { color:#ffc15e; }
     .dl-group { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
     .dl-group button { background:#27a179; }
   </style>
 </head>
 <body>
-<h1>🎬 EZmovie ดึงลิงก์ (แก้ GitHub 404+CORS)</h1>
+<h1>🎬 EZmovie — ตรงตามโค้ด Python ต้นฉบับ</h1>
 <div class="panel">
   <div class="form-row">
     <label>ลิงก์หมวดหมู่:</label>
-    <input type="text" id="catUrl" value="https://ezmovie.live/movies/หนัง-av-japan" style="width:450px">
+    <input type="text" id="web_movie" value="https://ezmovie.live/movies/หนัง-av-japan" style="width:480px">
   </div>
   <div class="form-row">
-    <label>เริ่มหน้า:</label><input type="number" id="startPage" min="1" value="1" style="width:70px">
-    <label>ถึงหน้า:</label><input type="number" id="endPage" min="1" value="24" style="width:70px">
+    <label>เริ่มหน้า:</label><input type="number" id="start_page" min="1" value="1" style="width:70px">
+    <label>ถึงหน้า:</label><input type="number" id="end_page" min="1" value="24" style="width:70px">
     <button id="btnGo" onclick="startScrape()">▶️ เริ่มทำงาน</button>
   </div>
   <div class="stat">
     <span>สำเร็จ: <b id="cntOk" class="ok">0</b></span>
-    <span>ไม่พบ/หมดอายุ: <b id="cntDead" class="err">0</b></span>
+    <span>ไม่สำเร็จ: <b id="cntErr" class="err">0</b></span>
   </div>
   <pre id="log"></pre>
   <div class="dl-group" id="dlArea" style="display:none">
-    <button onclick="saveFile(f_w3u, JSON.stringify(jseries,null,2))">📄 บันทึก W3U</button>
-    <button onclick="saveFile(f_m3u, buildM3U())">📺 บันทึก M3U</button>
+    <button onclick="saveW3U()">📄 บันทึก W3U</button>
+    <button onclick="saveM3U()">📺 บันทึก M3U</button>
   </div>
 </div>
 
 <script>
-// ✅ ห้ามแก้ — ใช้แค่ ezmovie.live เท่านั้น
+// ============ ตั้งค่า ตรงตามต้นฉบับเป๊ะ ============
 const PROXY = "https://ezmovies.samornnovember.workers.dev/?url=";
-const BASE_REAL = "https://ezmovie.live";
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-const LOGO = BASE_REAL + "/build/web/ez-movie/img/ez-movie-logo.png";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36";
+const BASE = "https://ezmovie.live";
+const LOGO = BASE + "/build/web/ez-movie/img/ez-movie-logo.png";
 
-let jseries = {name:"", author:" อัพเดต ", info:"EZmovie v1.05", image:"", groups:[], stations:[]};
-let f_w3u = "", f_m3u = "", baseUrl = "";
-let totalOk = 0, totalDead = 0;
+let jseries = {name:"", author:" อัพเดต ", info:"EZmovie v1.03", image:"", groups:[], stations:[]};
+let f_w3u = "", f_m3u = "", referer = "", totalOk = 0, totalErr = 0;
 
 const elLog = document.getElementById("log"), elBtn = document.getElementById("btnGo");
-const elCatUrl = document.getElementById("catUrl"), elStart = document.getElementById("startPage"), elEnd = document.getElementById("endPage");
-const elCntOk = document.getElementById("cntOk"), elCntDead = document.getElementById("cntDead");
+const elWeb = document.getElementById("web_movie"), elStart = document.getElementById("start_page"), elEnd = document.getElementById("end_page");
+const elCntOk = document.getElementById("cntOk"), elCntErr = document.getElementById("cntErr");
 const elDlArea = document.getElementById("dlArea");
 
+// ============ ฟังก์ชันพื้นฐาน ============
 function log(t){ elLog.textContent += t + "\n"; elLog.scrollTop = elLog.scrollHeight; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function saveFile(n,b){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([b],{type:"text/plain;charset=utf-8"})); a.download=n; a.click(); URL.revokeObjectURL(a.href); }
-function urlBase(u){ try{ const p=new URL(fixUrl(u)); return p.protocol+"//"+p.hostname+"/"; }catch{return BASE_REAL+"/";} }
 function unquote(s){ return decodeURIComponent(s||""); }
+function urlparse(u){ try{ const p=new URL(u); return {protocol:p.protocol,hostname:p.hostname,pathname:p.pathname,origin:p.origin}; }catch{return {protocol:"https:",hostname:"ezmovie.live",pathname:"/",origin:BASE};} }
+function urlBase(u){ const p=urlparse(u); return `${p.protocol}//${p.hostname}/`; }
 
-// ✅ ตัดทิ้งทุกโดเมนที่ไม่ใช่ ezmovie.live
+// ป้องกันลิงก์ผิดพลาด
 function fixUrl(u){
   if(!u) return ""; u=u.trim();
-  if(u.includes("github.io") || u.includes("localhost")) return u.replace(/^https?:\/\/[^\/]+/, BASE_REAL);
-  if(u.startsWith("/")) return BASE_REAL+u;
+  if(u.startsWith("/")) return BASE+u;
+  if(u.includes("github.io")||u.includes("localhost")) return u.replace(/^https?:\/\/[^\/]+/,BASE);
   return u;
 }
-function safeMatch(str,rgx,def=null){ return str?.match(rgx)||def; }
 
 async function safeFetch(url, extra={}){
   const fixed=fixUrl(url); if(!fixed) return null;
   try{
     return await fetch(PROXY+encodeURIComponent(fixed),{
-      headers:{"User-Agent":UA,"Referer":BASE_REAL+"/",...extra},timeout:20000
+      headers:{"User-Agent":UA,"Referer":referer,...extra},redirect:"manual",timeout:20000
     });
   }catch{return null;}
 }
-async function getLink(x){ const h=await safeFetch(x); return h?.headers.get("location")?[h.headers.get("location"),h]:["no location",h]; }
-function getJscFromS(s){ const q=s?.querySelectorAll?.('script[type="text/javascript"]')||[]; if(!q.length)return[]; const t=q[q.length-1]?.textContent||""; return t?("eval"+t.split("eval").pop()).split("|").filter(a=>a?.length===32).map(a=>"https://ezmovie4k.com/video/"+a).reverse().slice(1):[]; }
 
-async function getPlink(x){
-  const fixed=fixUrl(x); const wr=urlBase(fixed);
-  if(fixed.includes("ezmovie4k.com")){
-    const h=fixed.split("/").pop(); if(!h)return[null,wr];
-    const r=await safeFetch(`https://ezmovie4k.com/player/index.php?data=${h}&do=getVideo`,{"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8","X-Requested-With":"XMLHttpRequest"});
-    if(!r?.ok)return[null,wr]; try{ const j=JSON.parse((await r.text()).replace(/\\/g,"")); if(!j?.videoSource)return[null,wr]; const hp=await safeFetch(j.videoSource); return hp?.ok?[(await hp.text()).split("\n").filter(l=>l.trim()&&!l.startsWith("#")).pop()||null,wr]:[null,wr]; }catch{return[null,wr];}
-  }
-  const r=await safeFetch(fixed); if(!r?.ok)return[null,wr]; const m=safeMatch(await r.text(),/vhash,\s*({[\s\S]*?}),\s*false/); if(!m)return[null,wr];
-  try{ const j=JSON.parse(m[1].replace(/\\/g,"")); const pl=`${wr}${j.videoUrl}?s=${j.videoServer}&d=${j.videoDisk||""}`; const hp=await safeFetch(pl); return hp?.ok?[(await hp.text()).split("\n").filter(l=>l.trim()&&!l.startsWith("#")).pop()||null,wr]:[null,wr]; }catch{return[null,wr];}
+// ============ ตรงตาม Python: get_link ============
+async function get_link(x){
+  const h=await safeFetch(x);
+  if(!h) return ["no link",null];
+  if(h.headers.get("Location")) return [h.headers.get("Location"),h];
+  return ["no location",h];
 }
-function buildM3U(){ let o="#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-VERSION:3\n\n"; jseries.groups.forEach(g=>g.stations.forEach(s=>o+=`#EXTINF:-1 group-title="${g.name}",${s.name} ${s.info||""}\n${s.url}\n\n`)); return o.trim(); }
 
+// ============ ตรงตาม Python: get_jsc_from_s ============
+function get_jsc_from_s(soup){
+  if(!soup) return [];
+  const scripts = soup.querySelectorAll('script[type="text/javascript"]');
+  if(!scripts.length) return [];
+  const last = scripts[scripts.length-1];
+  if(!last||!last.textContent) return [];
+  const jsc = "eval" + last.textContent.split("eval").pop();
+  return jsc.split("|").filter(a=>a&&a.length===32).map(a=>"https://ezmovie4k.com/video/"+a).reverse().slice(1);
+}
+
+// ============ ตรงตาม Python: get_plink ============
+async function get_plink(x){
+  let wr = urlBase(x);
+  if(x.includes("ezmovie4k.com")){
+    const whash = x.split("/").pop()||"";
+    if(!whash) return [null,wr];
+    const res = await safeFetch(`https://ezmovie4k.com/player/index.php?data=${whash}&do=getVideo`,{
+      "Content-Type":"application/x-www-form-urlencoded; charset=UTF-8","X-Requested-With":"XMLHttpRequest"
+    });
+    if(!res||!res.ok) return [null,wr];
+    try{
+      const jdata = JSON.parse((await res.text()).replace(/\\/g,""));
+      const plink = jdata.videoSource;
+      const hp = await safeFetch(plink);
+      if(!hp||!hp.ok) return [null,wr];
+      const lines = (await hp.text()).split("\n").filter(l=>l.trim());
+      return [lines.length?lines.pop()+".m3u":null,wr];
+    }catch{return [null,wr];}
+  }else{
+    wr = urlBase(x);
+    const res = await safeFetch(x,{referer:BASE});
+    if(!res||!res.ok) return [null,wr];
+    const txt = await res.text();
+    const m = txt.match(/vhash,\s*({[\s\S]*?}),\s*false/);
+    if(!m) return [null,wr];
+    try{
+      const jdata = JSON.parse(m[1].replace(/\\/g,""));
+      const jvd = jdata.videoDisk===null?"":jdata.videoDisk;
+      const plink = `${wr.replace(/\/$/,"")}${jdata.videoUrl}?s=${jdata.videoServer}&d=${jvd}`;
+      const hp = await safeFetch(plink);
+      if(!hp||!hp.ok) return [null,wr];
+      const lines = (await hp.text()).split("\n").filter(l=>l.trim());
+      return [lines.length?lines.pop()+".m3u":null,wr];
+    }catch{return [null,wr];}
+  }
+}
+
+// ============ บันทึกไฟล์ ตรงตามต้นฉบับ ============
+function saveW3U(){
+  saveFile(f_w3u, JSON.stringify(jseries,null,1));
+}
+function saveM3U(){
+  let out="#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n\n";
+  if(jseries.groups) for(const g of jseries.groups) for(const s of g.stations||[]) out+=`#EXTINF:-1 group-title="${g.name}",${s.name} ${s.info||""}\n${s.url}\n\n`;
+  if(jseries.stations) for(const s of jseries.stations) out+=`#EXTINF:-1,${s.name} ${s.info||""}\n${s.url}\n\n`;
+  saveFile(f_m3u, out.trim());
+}
+function saveFile(n,b){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([b],{type:"text/plain;charset=utf-8"})); a.download=n; a.click(); URL.revokeObjectURL(a.href); }
+
+// ============ หลักการทำงานหลัก ตรงเป๊ะ ============
 async function startScrape(){
-  const web=fixUrl(elCatUrl.value.trim()); const s=parseInt(elStart.value)||1, e=parseInt(elEnd.value)||1;
-  if(!web||s<1||e<s)return alert("กรอกข้อมูลให้ถูกต้อง!");
-  elBtn.disabled=true; elLog.textContent=""; elDlArea.style.display="none"; totalOk=totalDead=0; jseries.groups=[];
-  elCntOk.textContent=elCntDead.textContent="0"; baseUrl=urlBase(web);
-  const fn=unquote(new URL(web).pathname.replace(/^\/+|\/+$/g,"").split("/").pop()||"index"); f_w3u=`EZmovie_${fn}.w3u`; f_m3u=`EZmovie_${fn}.m3u`;
-  const now=new Date(), m=['','ม.ค.','ก.พ.','มี.ค','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  jseries.author+=`${now.getDate()} ${m[now.getMonth()+1]} ${now.getFullYear()+543} ${now.toTimeString().slice(0,5)}`; jseries.image=LOGO;
-  const h=await safeFetch(web); if(!h?.ok)return log("❌ โหลดหมวดไม่ได้"),elBtn.disabled=false;
-  jseries.name=new DOMParser().parseFromString(await h.text(),"text/html").querySelector("h1")?.textContent.trim()||fn;
-  log(`\n🚀 เริ่ม หน้า ${s}-${e}\n`);
+  const web_movie = fixUrl(elWeb.value.trim());
+  const start_page = parseInt(elStart.value)||1;
+  const end_page = parseInt(elEnd.value)||1;
+  if(!web_movie||start_page<1||end_page<start_page) return alert("กรอกข้อมูลให้ถูกต้อง!");
 
-  for(let p=s;p<=e;p++){
-    const pl=p===1?web:`${web}?page=${p}`; log("=".repeat(60)); log(`📄 หน้า ${p}`);
-    jseries.groups.push({name:`หน้าที่ ${p}`,image:LOGO,stations:[]}); const gi=jseries.groups.length-1;
-    const r=await safeFetch(pl); if(!r?.ok){log("❌ โหลดหน้าไม่ได้");continue;}
-    const d=new DOMParser().parseFromString(await r.text(),"text/html");
-    const items=d.querySelectorAll(".-item-inner-wrapper")||[]; log(`   📋 พบ ${items.length} รายการ`);
+  elBtn.disabled=true; elLog.textContent=""; elDlArea.style.display="none";
+  totalOk=totalErr=0; jseries.groups=[]; jseries.stations=[];
+  elCntOk.textContent=elCntErr.textContent="0";
+  referer = urlBase(web_movie);
 
-    for(let i=0;i<items.length;i++){
-      const b=items[i]; const n=b.querySelector("h2")?.textContent.trim()||`ไม่ระบุ ${i+1}`;
-      const img=fixUrl(b.querySelector("img")?.dataset.src||""); log(`   [${i+1}] ${n}`);
-      let u=b.querySelector("a")?.dataset.url||b.querySelector("a")?.href||""; u=fixUrl(u).replace("/_ajax","");
-      if(!u){log("      ❌ ไม่มีลิงก์");totalDead++;continue;}
-      const dr=await safeFetch(u); if(!dr?.ok){log("      ❌ หมดอายุ/404");totalDead++;continue;}
-      const ds=new DOMParser().parseFromString(await dr.text(),"text/html");
-      const sw=ds.querySelector(".-player-switcher-wrapper"); let ok=false;
-      if(sw){
-        const f=fixUrl(ds.querySelector("iframe")?.src||"").replace(/amp;/g,"");
-        for(const btn of sw.querySelectorAll("button")){
-          const lng=btn.textContent.trim(), fu=f+"&type="+(btn.dataset.playerTypeTarget||"");
-          let lnk=null; try{ const [rd]=await getLink(fu); if(rd&&!rd.includes("youtube"))[lnk]=await getPlink(rd); }catch{const x=await safeFetch(fu);if(x?.ok){const m=safeMatch(await x.text(),/file:\s*'(.+?)'/s);lnk=m?.[1];}}
-          if(lnk){ log(`      ✅ [${lng}] ได้`); jseries.groups[gi].stations.push({name:n,info:lng,image:img,url:lnk}); totalOk++; elCntOk.textContent=totalOk; ok=true; }
+  // ตั้งชื่อไฟล์ ตรงตามต้นฉบับ
+  const path = urlparse(web_movie).pathname.replace(/^\/+|\/+$/g,"");
+  const fname = unquote(path.split("/").pop()||"index");
+  f_w3u = `EZmovie_${fname}.w3u`;
+  f_m3u = `EZmovie_${fname}.m3u`;
+
+  // วันที่ ตรงตามรูปแบบไทย
+  const now = new Date();
+  const month = ['','ม.ค.','ก.พ.','มี.ค','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const timeday = `${now.getDate()} ${month[now.getMonth()+1]} ${now.getFullYear()+543}`;
+  const timehour = now.toTimeString().slice(0,5);
+  jseries.author += ` ${timeday} ${timehour}`;
+  jseries.image = LOGO;
+
+  // ดึงชื่อหมวดหมู่
+  const hres = await safeFetch(web_movie);
+  if(!hres||!hres.ok) return log("❌ โหลดหน้าหลักไม่ได้"), elBtn.disabled=false;
+  const hs = new DOMParser().parseFromString(await hres.text(),"text/html");
+  jseries.name = hs.querySelector("h1")?.textContent.trim()||fname;
+
+  log(`\n🚀 เริ่มดึงข้อมูล หน้า ${start_page} ถึง ${end_page} ...\n`);
+
+  // วนตามหน้า
+  for(let page_num=start_page; page_num<=end_page; page_num++){
+    const page_link = page_num===1 ? web_movie : `${web_movie}?page=${page_num}`;
+    log("=".repeat(70));
+    log(`📄 กำลังประมวลผลหน้า [${page_num}/${end_page}] : ${unquote(page_link)}`);
+
+    jseries.groups.push({name:`หน้าที่ ${page_num}`,image:LOGO,stations:[]});
+    const group_index = jseries.groups.length-1;
+
+    const pres = await safeFetch(page_link);
+    if(!pres||!pres.ok){ log("❌ โหลดหน้าไม่ได้"); continue; }
+    const ps = new DOMParser().parseFromString(await pres.text(),"text/html");
+    const panel = ps.querySelector(".-row-inner-wrapper-item");
+    if(!panel){ log("❌ ไม่พบรายการในหน้านี้"); continue; }
+    const boxs = panel.querySelectorAll(".-item-inner-wrapper")||[];
+    const smax = boxs.length;
+    log(`   📋 พบ ${smax} รายการ`);
+
+    // วนแต่ละรายการ
+    for(let i=0; i<boxs.length; i++){
+      const box = boxs[i];
+      const pname = box.querySelector("h2")?.textContent.trim()||`ไม่ระบุ ${i+1}`;
+      const ppic = fixUrl(box.querySelector("img")?.dataset.src||"");
+      log(`  [${i+1}/${smax}] ${pname}`);
+
+      // ดึงลิงก์รายละเอียด ตรงตาม Python
+      let purl = "";
+      if(box.querySelector("a")?.dataset.url) purl = BASE + box.querySelector("a").dataset.url.replace("/_ajax","");
+      else if(box.querySelector("a")?.href) purl = BASE + box.querySelector("a").href.replace("/_ajax","");
+      else{ log("    ❌ ไม่เจอลิงก์"); totalErr++; elCntErr.textContent=totalErr; continue; }
+      purl = fixUrl(purl);
+      log(`  🔗 ${unquote(purl)}`);
+
+      const dres = await safeFetch(purl);
+      if(!dres||!dres.ok){ totalErr++; elCntErr.textContent=totalErr; continue; }
+      const ds = new DOMParser().parseFromString(await dres.text(),"text/html");
+      const mtype = ds.querySelector(".x-series-thumbnail") ? 0 : 1;
+      let wr = urlBase(purl);
+      let added = false;
+
+      // ============ หนังเดี่ยว ============
+      if(mtype){
+        const info = ds.querySelector(".x-movie-show-info");
+        const sw = info?.querySelector(".-player-switcher-wrapper");
+        if(info&&sw){
+          const langs = sw.querySelectorAll("button");
+          const dframe = fixUrl(ds.querySelector("iframe")?.src||"").replace(/amp;/g,"");
+          for(const lang of langs){
+            const plang = lang.textContent.trim();
+            const purl_frame = `${dframe}&type=${lang.dataset.playerTypeTarget||""}`;
+            let plink = null;
+            try{
+              const [purl_redir, h] = await get_link(purl_frame);
+              if(purl_redir!=="no location"){
+                try{ purl_redir = new DOMParser().parseFromString(await h.text(),"text/html").querySelector("a")?.href; }catch{}
+              }
+              if(purl_redir&&!purl_redir.includes("youtube")) [plink,wr] = await get_plink(purl_redir);
+            }catch{
+              const r = await safeFetch(purl_frame,{allow_redirects:"manual"});
+              if(r&&r.ok){
+                const txt = await r.text();
+                const pp = txt.match(/file:\s*'(.+?)'/s);
+                plink = pp?.[1]||null;
+              }
+            }
+            if(plink){
+              log(`    ✅ [${plang}] : ${plink.slice(0,70)}...`);
+              jseries.groups[group_index].stations.push({name:pname,info:plang,image:ppic,url:plink,referer:wr});
+              totalOk++; elCntOk.textContent=totalOk; added=true;
+            }
+          }
         }
-      }
-      if(!ok){
-        const f=fixUrl(ds.querySelector("iframe")?.src||"").replace(/amp;/g,"");
-        if(f){ const fr=await safeFetch(f); if(fr?.ok){ const fs=new DOMParser().parseFromString(await fr.text(),"text/html"); let pl=null; for(const x of getJscFromS(fs)){[pl]=await getPlink(x);if(pl)break;} if(!pl){const m=safeMatch(await fs.textContent||"",/file:\s*'(.+?)'/s);pl=m?.[1];} if(pl){log(`      ✅ ได้`);jseries.groups[gi].stations.push({name:n,info:"",image:img,url:pl});totalOk++;elCntOk.textContent=totalOk;}else{log(`      ⚠️ ไม่พบลิงก์`);totalDead++;elCntDead.textContent=totalDead;} } }
+        if(!added){
+          const sframe = fixUrl(ds.querySelector("iframe")?.src||"").replace(/amp;/g,"");
+          if(sframe){
+            const r = await safeFetch(sframe);
+            if(r&&r.ok){
+              const s = new DOMParser().parseFromString(await r.text(),"text/html");
+              let purl_l = get_jsc_from_s(s), plink=null;
+              if(purl_l&&purl_l.length>0){
+                for(const jid of purl_l){ [plink,wr] = await get_plink(jid); if(plink) break; }
+              }else{
+                const pp = (await r.text()).match(/file:\s*'(.+?)'/s);
+                plink = pp?.[1]||null;
+              }
+              if(plink){
+                log(`    ✅ : ${plink.slice(0,70)}...`);
+                jseries.groups[group_index].stations.push({name:pname,info:"",image:ppic,url:plink,referer:wr});
+                totalOk++; elCntOk.textContent=totalOk;
+              }
+            }
+          }
+        }
+      }else{
+        // ============ ซีรีส์ ============
+        const eps = ds.querySelector(".x-series-thumbnail")?.querySelectorAll(".-slick-item")||[];
+        for(let j=0; j<eps.length; j++){
+          const ebox = eps[j];
+          const ename = ebox.querySelector(".-title")?.textContent.trim()||"";
+          const ename2 = ename.includes("ตอนที่")?ename:`ตอนที่ ${ename}`;
+          const eurl = fixUrl(referer.replace(/\/$/,"") + ebox.querySelector("a")?.href||"");
+          log(`    📌 [${j+1}/${eps.length}] ${ename2}`);
+
+          const eres = await safeFetch(eurl);
+          if(!eres||!eres.ok||(await eres.text()).includes("Resource not found")) continue;
+          const es = new DOMParser().parseFromString(await eres.text(),"text/html");
+          let plink=null, plang="";
+
+          const sw = es.querySelector(".-player-switcher-wrapper");
+          if(sw){
+            const langs = sw.querySelectorAll("button");
+            const dframe = fixUrl(es.querySelector("iframe")?.src||"").replace(/amp;/g,"");
+            for(const lang of langs){
+              plang = lang.textContent.trim();
+              const fu = `${dframe}&type=${lang.dataset.playerTypeTarget||""}`;
+              try{
+                const [rd] = await get_link(fu);
+                if(rd&&!rd.includes("youtube")) [plink] = await get_plink(rd);
+              }catch{
+                const r = await safeFetch(fu);
+                if(r&&r.ok){ const m=(await r.text()).match(/file:\s*'(.+?)'/s); plink=m?.[1]; }
+              }
+              if(plink) break;
+            }
+          }else{
+            const dframe = fixUrl(es.querySelector("iframe")?.src||"").replace(/amp;/g,"");
+            const r = await safeFetch(dframe);
+            if(r&&r.ok){
+              const s = new DOMParser().parseFromString(await r.text(),"text/html");
+              wr = urlBase(dframe);
+              const purl_l = get_jsc_from_s(s);
+              if(purl_l&&purl_l.length>0){
+                for(const jid of purl_l){ [plink,wr] = await get_plink(jid); if(plink) break; }
+              }else{
+                const pp = (await r.text()).match(/file:\s*'(.+?)'/s);
+                plink = pp?.[1]||null;
+              }
+            }
+          }
+          if(plink){
+            jseries.groups[group_index].stations.push({name:ename2,info:`[${plang}]`,image:ppic,url:plink,referer:wr});
+            totalOk++; elCntOk.textContent=totalOk;
+          }
+        }
       }
       await sleep(1200+Math.random()*800);
     }
   }
-  log("\n✅ เสร็จ! สำเร็จ:"+totalOk+" | ไม่ได้:"+totalDead); elDlArea.style.display="block"; elBtn.disabled=false;
+
+  log("\n"+"=".repeat(70));
+  log("✅ เสร็จสิ้นการทำงานครบถ้วน!");
+  log(`📊 ดึงข้อมูลสำเร็จ: หน้าที่ ${start_page} ถึง ${end_page}`);
+  log(`📂 ไฟล์ .w3u : ${f_w3u}`);
+  log(`📂 ไฟล์ .m3u : ${f_m3u}`);
+  log(`⚠️ หมายเหตุ: ลิงก์จาก bbk100.xyz หมดอายุเร็วมาก — ดึงเสร็จให้บันทึกทันที`);
+  elDlArea.style.display="block"; elBtn.disabled=false;
 }
 </script>
 </body>
