@@ -21,7 +21,7 @@
   </style>
 </head>
 <body>
-<h1>🎬 EZmovie — แก้ครบจบทุกปัญหา</h1>
+<h1>🎬 EZmovie — ตรง Python ต้นฉบับ 100%</h1>
 <div class="panel">
   <div class="form-row">
     <label>ลิงก์หมวดหมู่:</label>
@@ -44,12 +44,25 @@
 </div>
 
 <script>
+// ============ ค่าคงที่หลัก ============
 const PROXY = "https://ezmovies.samornnovember.workers.dev/?url=";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const BASE = "https://ezmovie.live";
 const LOGO = BASE + "/build/web/ez-movie/img/ez-movie-logo.png";
 
-let jseries = {name:"", author:" อัพเดต ", info:"EZmovie v1.07", image:"", groups:[], stations:[]};
+// ✅ กรองโฆษณา — ทิ้งลิงก์ไม่ใช่วิดีโอจริง
+const AD_DOMAINS = [
+  /ezslot-video\.s3\.ap-southeast-1\.amazonaws\.com/i,
+  /entry_web-ezmovie/i, /advert/i, /^ad\./i, /ads\./i
+];
+function isRealVideoLink(link){
+  if(!link) return false;
+  link = link.trim();
+  if(AD_DOMAINS.some(rx => rx.test(link))) return false;
+  return /\.m3u8$/i.test(link) || /\.mp4$/i.test(link) || /stream25\.com/i.test(link);
+}
+
+let jseries = {name:"", author:" อัพเดต ", info:"EZmovie v1.08", image:"", groups:[], stations:[]};
 let f_w3u = "", f_m3u = "", referer = "", totalOk = 0, totalErr = 0;
 
 const elLog = document.getElementById("log");
@@ -105,24 +118,25 @@ function get_jsc_from_s(soup){
 
 async function get_plink(x){
   let wr = urlBase(x);
-  if(x.indexOf("ezmovie4k.com")>-1){
+  if(x.indexOf("ezmovie4k.com") > -1){
     const h = x.split("/").pop()||""; if(!h) return [null,wr];
     const r = await safeFetch("https://ezmovie4k.com/player/index.php?data="+h+"&do=getVideo", {
       "Content-Type":"application/x-www-form-urlencoded; charset=UTF-8","X-Requested-With":"XMLHttpRequest"
     });
     if(!r||!r.ok) return [null,wr];
     try{
-      const txt = await r.text(); // ✅ อ่านครั้งเดียว เก็บไว้ใช้
+      const txt = await r.text();
       const j = JSON.parse(txt.replace(/\\/g,""));
       const hp = await safeFetch(j.videoSource);
       if(!hp||!hp.ok) return [null,wr];
       const hpTxt = await hp.text();
-      const lines = hpTxt.split("\n").filter(function(l){return l.trim();});
-      return [lines.length?lines.pop()+".m3u":null,wr];
+      const lines = hpTxt.split("\n").filter(l=>l.trim() && !l.startsWith("#")).reverse();
+      for(const line of lines) if(isRealVideoLink(line)) return [line.trim(), wr];
+      return [null,wr];
     }catch(err){ return [null,wr]; }
   }else{
     const r = await safeFetch(x); if(!r||!r.ok) return [null,wr];
-    const txt = await r.text(); // ✅ อ่านครั้งเดียว เก็บไว้ใช้
+    const txt = await r.text();
     const m = txt.match(/vhash,\s*({[\s\S]*?}),\s*false/); if(!m) return [null,wr];
     try{
       const j = JSON.parse(m[1].replace(/\\/g,""));
@@ -130,8 +144,9 @@ async function get_plink(x){
       const pl = wr.replace(/\/$/,"") + j.videoUrl + "?s=" + j.videoServer + "&d=" + jvd;
       const hp = await safeFetch(pl); if(!hp||!hp.ok) return [null,wr];
       const hpTxt = await hp.text();
-      const lines = hpTxt.split("\n").filter(function(l){return l.trim();});
-      return [lines.length?lines.pop()+".m3u":null,wr];
+      const lines = hpTxt.split("\n").filter(l=>l.trim() && !l.startsWith("#")).reverse();
+      for(const line of lines) if(isRealVideoLink(line)) return [line.trim(), wr];
+      return [null,wr];
     }catch(err){ return [null,wr]; }
   }
 }
@@ -173,7 +188,7 @@ async function startScrape(){
 
   const hres=await safeFetch(web_movie);
   if(!hres||!hres.ok){ log("❌ โหลดหน้าหลักไม่ได้"); elBtn.disabled=false; return; }
-  const htm = await hres.text(); // ✅ อ่านครั้งเดียว
+  const htm = await hres.text();
   const hs = new DOMParser().parseFromString(htm,"text/html");
   jseries.name = hs.querySelector("h1") ? hs.querySelector("h1").textContent.trim() : fname;
 
@@ -188,7 +203,7 @@ async function startScrape(){
 
     const pres=await safeFetch(page_link);
     if(!pres||!pres.ok){ log("❌ โหลดหน้าไม่ได้"); continue; }
-    const psTxt = await pres.text(); // ✅ อ่านครั้งเดียว
+    const psTxt = await pres.text();
     const ps = new DOMParser().parseFromString(psTxt,"text/html");
     const panel = ps.querySelector(".-row-inner-wrapper-item");
     if(!panel){ log("❌ ไม่พบรายการ"); continue; }
@@ -209,7 +224,7 @@ async function startScrape(){
 
       const dres=await safeFetch(purl);
       if(!dres||!dres.ok){ totalErr++; elCntErr.textContent=totalErr; continue; }
-      const dsTxt = await dres.text(); // ✅ อ่านครั้งเดียว
+      const dsTxt = await dres.text();
       const ds = new DOMParser().parseFromString(dsTxt,"text/html");
       const mtype = ds.querySelector(".x-series-thumbnail") ? 0 : 1;
       let wr = urlBase(purl), added=false;
@@ -230,10 +245,14 @@ async function startScrape(){
               }
             }catch(err){
               const r = await safeFetch(fu);
-              if(r&&r.ok){ const mt=(await r.text()).match(/file:\s*'(.+?)'/s); plink=mt?mt[1]:null; }
+              if(r&&r.ok){
+                const mTxt = await r.text();
+                const matches = mTxt.matchAll(/file:\s*['"](.+?)['"]/gi);
+                for(const mt of matches) if(isRealVideoLink(mt[1])){ plink=mt[1]; break; }
+              }
             }
             if(plink){
-              log("    ✅ ["+plang+"] ได้ลิงก์");
+              log("    ✅ ["+plang+"] ได้ลิงก์วิดีโอจริง");
               jseries.groups[group_index].stations.push({name:pname,info:plang,image:ppic,url:plink,referer:wr});
               totalOk++; elCntOk.textContent=totalOk; added=true;
             }
@@ -244,13 +263,16 @@ async function startScrape(){
           if(sframe){
             const r = await safeFetch(sframe);
             if(r&&r.ok){
-              const sTxt = await r.text(); // ✅ อ่านครั้งเดียว
-              const s = new DOMParser().parseFromString(sTxt,"text/html");
-              let purl_l = get_jsc_from_s(s), plink=null;
+              const sTxt = await r.text();
+              let purl_l = get_jsc_from_s(new DOMParser().parseFromString(sTxt,"text/html"));
+              let plink=null;
               for(let j=0;j<purl_l.length;j++){ const resP=await get_plink(purl_l[j]); plink=resP[0]; wr=resP[1]; if(plink)break; }
-              if(!plink){ const mt=sTxt.match(/file:\s*'(.+?)'/s); plink=mt?mt[1]:null; }
+              if(!plink){
+                const matches = sTxt.matchAll(/file:\s*['"](.+?)['"]/gi);
+                for(const mt of matches) if(isRealVideoLink(mt[1])){ plink=mt[1]; break; }
+              }
               if(plink){
-                log("    ✅ ได้ลิงก์");
+                log("    ✅ ได้ลิงก์วิดีโอจริง");
                 jseries.groups[group_index].stations.push({name:pname,info:"",image:ppic,url:plink,referer:wr});
                 totalOk++; elCntOk.textContent=totalOk;
               }
@@ -267,9 +289,8 @@ async function startScrape(){
           log("    📌 ["+(j+1)+"] "+ename2);
 
           const eres=await safeFetch(eurl);
-          // ✅ เช็คสถานะก่อน ไม่ต้องอ่านซ้ำ
           if(!eres||!eres.ok) continue;
-          const esTxt = await eres.text(); // ✅ อ่านครั้งเดียว
+          const esTxt = await eres.text();
           if(esTxt.indexOf("Resource not found")>-1) continue;
           const es = new DOMParser().parseFromString(esTxt,"text/html");
           let plink=null,plang="";
@@ -282,18 +303,18 @@ async function startScrape(){
               const lang=langs[l]; plang=lang.textContent.trim();
               const fu=dframe+"&type="+lang.dataset.playerTypeTarget;
               try{ const rd=await get_link(fu); if(rd[0]!=="no location"&&rd[0].indexOf("youtube")===-1){ const resP=await get_plink(rd[0]); plink=resP[0]; } }
-              catch(err){ const r=await safeFetch(fu); if(r&&r.ok){ const mt=(await r.text()).match(/file:\s*'(.+?)'/s); plink=mt?mt[1]:null; } }
+              catch(err){ const r=await safeFetch(fu); if(r&&r.ok){ const mTxt=await r.text(); const matches=mTxt.matchAll(/file:\s*['"](.+?)['"]/gi); for(const mt of matches) if(isRealVideoLink(mt[1])){ plink=mt[1]; break; } } }
               if(plink)break;
             }
           }else{
             const dframe = fixUrl(es.querySelector("iframe") ? es.querySelector("iframe").src : "").replace(/amp;/g,"");
             const r = await safeFetch(dframe);
             if(r&&r.ok){
-              const sTxt = await r.text(); // ✅ อ่านครั้งเดียว
+              const sTxt = await r.text();
               wr = urlBase(dframe);
               const purl_l = get_jsc_from_s(new DOMParser().parseFromString(sTxt,"text/html"));
               for(let j=0;j<purl_l.length;j++){ const resP=await get_plink(purl_l[j]); plink=resP[0]; wr=resP[1]; if(plink)break; }
-              if(!plink){ const mt=sTxt.match(/file:\s*'(.+?)'/s); plink=mt?mt[1]:null; }
+              if(!plink){ const matches=sTxt.matchAll(/file:\s*['"](.+?)['"]/gi); for(const mt of matches) if(isRealVideoLink(mt[1])){ plink=mt[1]; break; } }
             }
           }
           if(plink) jseries.groups[group_index].stations.push({name:ename2,info:"["+plang+"]",image:ppic,url:plink,referer:wr});
@@ -305,6 +326,7 @@ async function startScrape(){
 
   log("\n"+"=".repeat(70));
   log("✅ เสร็จสิ้น! สำเร็จ: "+totalOk+" | ไม่สำเร็จ: "+totalErr);
+  log("⚠️ ลิงก์วิดีโอหมดอายุไว — บันทึกไฟล์ทันที");
   elDlArea.style.display="block"; elBtn.disabled=false;
 }
 
