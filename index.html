@@ -20,7 +20,7 @@
   </style>
 </head>
 <body>
-<h1>🎬 EZmovie — SAMORN FUCK 1.0</h1>
+<h1>🎬 EZmovie — SAMORN ซัค 1.01</h1>
 <div class="panel">
   <div class="row">
     <label>ลิงก์หมวดหมู่:</label>
@@ -43,11 +43,15 @@
 </div>
 
 <script>
-const PROXY = "https://ezmovies.samornnovember.workers.dev/?url=";
+// ✅ เปลี่ยนเป็นเรียก Worker โดยตรง — ไม่มี PROXY ซ้อนอีกต่อไป
+const WORKER_URL = "https://ezmovies.samornnovember.workers.dev/";
 const BASE = "https://ezmovie.live";
 const LOGO = BASE + "/build/web/ez-movie/img/ez-movie-logo.png";
 
-let jseries = {name:"", author:" อัพเดต ", info:"EZmovie v2.0-SECRET", image:LOGO, groups:[], stations:[]};
+let jseries = {
+  name:"", author:" อัพเดต ", info:"EZmovie v2.0-SECRET", image:LOGO,
+  groups:[], stations:[]
+};
 let totalOk=0, totalErr=0;
 
 const elLog = document.getElementById("log");
@@ -62,7 +66,11 @@ const elBtnM3u = document.getElementById("btnM3u");
 
 function log(t){ elLog.textContent += t+"\n"; elLog.scrollTop = elLog.scrollHeight; }
 function unquote(s){ return decodeURIComponent(s||""); }
-function saveFile(n,b){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([b],{type:"text/plain;charset=utf-8"})); a.download=n; a.click(); URL.revokeObjectURL(a.href); }
+function saveFile(n,b){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([b],{type:"text/plain;charset=utf-8"}));
+  a.download=n; a.click(); URL.revokeObjectURL(a.href);
+}
 function saveW3u(){ saveFile("EZmovie.w3u", JSON.stringify(jseries,null,2)); }
 function saveM3u(){
   let out="#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-VERSION:3\n\n";
@@ -81,14 +89,27 @@ async function startScrape(){
 
   log(`🚀 เริ่มดึง หน้าที่ ${page} ...`);
   try{
-    const res = await fetch(`${PROXY}${encodeURIComponent(url)}&page=${page}`);
-    const data = await res.json();
+    // ✅ เรียก Worker ตรงๆ — ไม่ผ่าน proxy ซ้อน
+    const apiUrl = `${WORKER_URL}?url=${encodeURIComponent(url)}&page=${page}`;
+    log(`🔗 ติดต่อ: ${apiUrl}`);
+
+    const res = await fetch(apiUrl);
+    const text = await res.text(); // อ่านเป็นข้อความก่อนเสมอ ป้องกัน JSON parse ผิดพลาด
+
+    // ✅ ตรวจสอบก่อนแปลง JSON
+    let data;
+    try{
+      data = JSON.parse(text);
+    }catch(parseErr){
+      throw new Error(`ไม่ใช่ข้อมูล JSON (ได้เนื้อหา: ${text.slice(0,300)}...)`);
+    }
+
     if(data.error) throw new Error(data.error);
 
-    jseries.name = data.name;
-    jseries.stations = data.stations||[];
-    jseries.groups = data.groups||[];
-    totalOk = jseries.stations.length + jseries.groups.reduce((s,g)=>s+g.stations.length,0);
+    jseries.name = data.name || "ไม่ระบุ";
+    jseries.stations = Array.isArray(data.stations) ? data.stations : [];
+    jseries.groups = Array.isArray(data.groups) ? data.groups : [];
+    totalOk = jseries.stations.length + jseries.groups.reduce((sum,g)=>sum + (g.stations?.length||0), 0);
 
     log(`✅ เสร็จสิ้น! หนังเดี่ยว:${jseries.stations.length} | ซีรีส์:${jseries.groups.length} เรื่อง | รวม:${totalOk}`);
     elDlArea.style.display="block";
