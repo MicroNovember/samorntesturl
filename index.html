@@ -28,7 +28,7 @@
 </head>
 <body>
 
-<h1>📺 สร้างรายการ M3U จาก 24HD</h1>
+<h1>📺 สร้างรายการ M3U จาก 24HD ..SAMORN..</h1>
 
 <div class="helper-box">
   💡 <strong>แนะนำ:</strong> สามารถค้นหารายการหมวดหมู่ที่ต้องการได้จากเว็บไซต์หลักโดยตรง: <a href="https://www.24hd.vip" target="_blank">24hd.vip</a>
@@ -37,7 +37,7 @@
 <div class="card">
   <label>🔗 URL หมวดหมู่</label>
   <input type="text" id="catUrl" value="https://www.24hd.vip/category/netflix/" placeholder="https://www.24hd.vip/category/...">
-  <div class="small">รองรับทุกหมวดหมู่จาก 24hd.vip (จำกัดการดึงสูงสุดไม่เกิน 3 หน้าต่อครั้งเพื่อความเสถียร)</div>
+  <div class="small">เฉพาะหนัง ทุกหมวดหมู่จาก 24hd.vip (จำกัดการดึงสูงสุดไม่เกิน 3 หน้าต่อครั้ง)</div>
 
   <div class="row">
     <div>
@@ -63,7 +63,9 @@
 </div>
 
 <script>
+// 🛠️ เปลี่ยนลิงก์นี้ให้เป็น URL ของ Cloudflare Worker ของคุณ
 const WORKER_URL = "https://ezmovies.samornnovember.workers.dev/";
+const SECRET_TOKEN = "M!kpM!kp230121230121"; // รหัสผ่านลับตรงกับ Worker
 
 const btn = document.getElementById("btnRun");
 const status = document.getElementById("status");
@@ -99,7 +101,7 @@ async function gen(){
   result.style.display = "none";
 
   try{
-    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}&start=${s}&end=${e}`);
+    const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}&start=${s}&end=${e}&token=${SECRET_TOKEN}`);
     const txt = await res.text();
     if(!res.ok) throw txt;
 
@@ -139,7 +141,6 @@ function downloadM3u() {
   const a = document.createElement('a');
   a.href = url;
   
-  // สร้างชื่อไฟล์อัตโนมัติจาก URL หมวดหมู่
   const catInput = document.getElementById("catUrl").value.trim();
   const segments = catInput.split('/').filter(Boolean);
   const categoryName = segments[segments.length - 1] || 'playlist';
