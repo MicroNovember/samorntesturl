@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>24HD M3U Generator | ไม่ใช้ Python</title>
+  <title>24HD M3U Generator - แก้ไขแล้ว</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
     body{max-width:750px;margin:30px auto;padding:0 15px;line-height:1.6}
@@ -15,7 +15,7 @@
     .row div{flex:1}
     button{padding:9px 18px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-size:15px;cursor:pointer;margin-top:8px}
     button:disabled{background:#94a3b8;cursor:not-allowed}
-    #status{margin:12px 0;color:#444}
+    #status{margin:12px 0;color:#444;white-space:pre-wrap}
     pre{background:#fff;padding:12px;border-radius:6px;overflow-x:auto;border:1px solid #eee;margin-top:10px}
     .small{font-size:13px;color:#666;margin-top:5px}
   </style>
@@ -25,9 +25,9 @@
 <h1>📺 สร้างรายการ M3U จาก 24HD</h1>
 
 <div class="card">
-  <label>🔗 URL หมวดหมู่ (ป้อนเองได้เลย)</label>
-  <input type="text" id="catUrl" value="https://www.24hd.vip/category/netflix/" placeholder="เช่น https://www.24hd.vip/category/action/">
-  <div class="small">รองรับทุกหมวดหมู่จากเว็บ 24hd.vip ครับ</div>
+  <label>🔗 URL หมวดหมู่</label>
+  <input type="text" id="catUrl" value="https://www.24hd.vip/category/netflix/" placeholder="https://www.24hd.vip/category/...">
+  <div class="small">รองรับทุกหมวดหมู่จาก 24hd.vip</div>
 
   <div class="row">
     <div>
@@ -45,12 +45,12 @@
 
 <p id="status"></p>
 <div id="result" style="display:none">
-  <button onclick="copy()">📋 คัดลอก M3U ไปใช้งาน</button>
+  <button onclick="copy()">📋 คัดลอก M3U</button>
   <pre id="out"></pre>
 </div>
 
 <script>
-// 👉 ใส่ลิงก์ Cloudflare Worker ของคุณตรงนี้
+// 👉 ใส่ลิงก์ Worker ของคุณ
 const WORKER_URL = "https://ezmovies.samornnovember.workers.dev/";
 
 const btn = document.getElementById("btnRun");
@@ -64,22 +64,26 @@ async function gen(){
   const e = document.getElementById("end").value;
 
   if(!url.startsWith("https://www.24hd.vip/")){
-    status.textContent = "❌ ต้องเป็นลิงก์จากเว็บ 24hd.vip เท่านั้น";
+    status.textContent = "❌ ต้องเป็นลิงก์จาก 24hd.vip เท่านั้น";
     return;
   }
 
   btn.disabled = true;
-  status.textContent = "⏳ กำลังดึงข้อมูล... อาจใช้เวลาสักครู่";
+  status.textContent = "⏳ กำลังดึงข้อมูล... อาจใช้เวลา 5-15 วินาที";
   result.style.display = "none";
 
   try{
     const res = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}&start=${s}&end=${e}`);
     const txt = await res.text();
-    if(!res.ok || !txt.startsWith("#EXTM3U")) throw txt;
+    if(!res.ok) throw txt;
 
     out.textContent = txt;
     result.style.display = "block";
-    status.textContent = "✅ เสร็จสิ้น! คัดลอกไปใช้งานได้เลย";
+    if(txt.startsWith("#EXTM3U")){
+      status.textContent = "✅ เสร็จสิ้น! คัดลอกไปใช้งานได้เลย";
+    }else{
+      status.textContent = "⚠️ แจ้งเตือน:\n" + txt;
+    }
   }catch(err){
     status.textContent = "❌ ผิดพลาด: " + err;
   }finally{
@@ -89,7 +93,7 @@ async function gen(){
 
 function copy(){
   navigator.clipboard.writeText(out.textContent);
-  alert("✅ คัดลอกเรียบร้อยแล้วครับ");
+  alert("✅ คัดลอกเรียบร้อยแล้ว");
 }
 </script>
 
